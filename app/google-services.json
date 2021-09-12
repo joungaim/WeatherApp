@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "27965528214",
+    "project_id": "weather-9d11a",
+    "storage_bucket": "weather-9d11a.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:27965528214:android:4d913bc9ed4e1b75b7cab7",
+        "android_client_info": {
+          "package_name": "com.nidit.weathersee"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "27965528214-9v65co9ph5d1alm7i7v6a5fo0ph9ejj9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBTg5-CHpg9Kht_kSCJrqJ7Oq6z86zu4zU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "27965528214-9v65co9ph5d1alm7i7v6a5fo0ph9ejj9.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
