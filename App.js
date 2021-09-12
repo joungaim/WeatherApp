@@ -4,27 +4,31 @@ import { Alert, StyleSheet, Text, View } from "react-native";
 import * as Location from "expo-location";
 import axios from "axios";
 import moment from "moment";
-
-const API_KEY =
-  "Skm8Sx%2BhuSd8PBsZeDzGPZVXFlXODLxEJR2MRRajPQqn1aID2DYuEYoMC97NhdpJ4AzetqrX2xTDHtIUKnTX1g%3D%3D";
-
-// 위,경도 -> 좌표변환 하기 위한 기본값
-const RE = 6371.00877; // 지구 반경(km)
-const GRID = 5.0; // 격자 간격(km)
-const SLAT1 = 30.0; // 투영 위도1(degree)
-const SLAT2 = 60.0; // 투영 위도2(degree)
-const OLON = 126.0; // 기준점 경도(degree)
-const OLAT = 38.0; // 기준점 위도(degree)
-const XO = 43; // 기준점 X좌표(GRID)
-const YO = 136; // 기1준점 Y좌표(GRID)
-//
+import UltStrWeather from "./UltStrWeather";
+import Loading from "./Loading";
 
 export default function App() {
+  const [isLoading, setIsLoading] = useState(true);
+
   const [latitude, setLatitude] = useState(null);
   const [longitude, setLongitude] = useState(null);
-  const [baseDate, setBaseDate] = useState(null);
-  const [baseTime, setBaseTime] = useState("0200");
-  let [weatherData, setWeatherData] = useState();
+
+  /**
+   * 단기예보조회용 변수
+   */
+  const [srtBaseDate, setSrtBaseDate] = useState(null);
+  const [srtBaseTime, setSrtBaseTime] = useState("0200");
+  const [srtWeatherObj, setSrtWeatherObj] = useState({});
+
+  /**
+   * 초단기실황조회용 변수
+   */
+  const [ultraSrtBaseDate, setUltraSrtBaseDate] = useState(null);
+  const [ultraSrtBaseTime, setUltraSrtBaseTime] = useState("0000");
+  const [ultSrtWeatherObj, setUltSrtWeatherObj] = useState({});
+
+  let [addrObj, setAddrObj] = useState({});
+
   // 날씨 데이터
   const [pop, setPop] = useState(); // 강수확률 단위 : %
   const [pty, setPty] = useState(); // 강수형태
@@ -42,48 +46,116 @@ export default function App() {
   // 날씨 데이터
 
   getTime = async () => {
-    var todayDate = moment().format("YYYYMMDD");
-    var currentTime = moment().format("HHmm"); //현재 시간분 (HH:24h / hh:12h)
-    var yesterdayDate = moment().subtract(1, "days"); // 어제날짜 구하기
+    let todayDate = moment().format("YYYYMMDD");
+    let currentTime = moment().format("HHmm"); //현재 시간분 (HH:24h / hh:12h)
+    let yesterdayDate = moment().subtract(1, "days"); // 어제날짜 구하기
     yesterdayDate = moment(yesterdayDate).format("YYYYMMDD"); // 어제날짜 포맷 재 설정
-    var baseTime;
 
-    setBaseDate(todayDate);
-    // 기상청 정보는 1일 총 8번 업데이트 된다.(0200, 0500, 0800, 1100, 1400, 1700, 2000, 2300)
-    // moment(currentTime).isBetween("1200", "0210") : 1200 <= currentTime < 0210 : 1200은 포함되고 (true) 0210은 포함되지 않음(flase)
+    let srtBaseTime;
+    let ultraSrtBaseTime;
+
+    setSrtBaseDate(todayDate);
+    setUltraSrtBaseDate(todayDate);
+
+    /**
+     * [단기예보조회용 날짜/시간 세팅]
+     * 기상청 정보는 1일 총 8번 업데이트 된다.(0200, 0500, 0800, 1100, 1400, 1700, 2000, 2300)
+     * moment(currentTime).isBetween("1200", "0210") : 1200 <= currentTime < 0210 : 1200은 포함되고 (true) 0210은 포함되지 않음(flase)
+     */
     if (moment(currentTime).isBetween("1200", "0211")) {
       // 0시~2시 10분 사이 : base_date가 어제 날짜로 바뀌어야 한다.
-      setBaseDate(yesterdayDate);
-      baseTime = "2300";
+      setSrtBaseDate(yesterdayDate);
+      srtBaseTime = "2300";
     } else if (moment(currentTime).isBetween("0211", "0511")) {
       // 2시 11분~5시 10분 사이
-      baseTime = "0200";
+      srtBaseTime = "0200";
     } else if (moment(currentTime).isBetween("0511", "0811")) {
       // 5시 11분~8시 10분 사이
-      baseTime = "0500";
+      srtBaseTime = "0500";
     } else if (moment(currentTime).isBetween("0811", "1111")) {
       // 8시 11분~11시 10분 사이
-      baseTime = "0800";
+      srtBaseTime = "0800";
     } else if (moment(currentTime).isBetween("1111", "1411")) {
       // 11시 11분~14시 10분 사이
-      baseTime = "1100";
+      srtBaseTime = "1100";
     } else if (moment(currentTime).isBetween("1411", "1711")) {
       // 14시 11분~17시 10분 사이
-      baseTime = "1400";
+      srtBaseTime = "1400";
     } else if (moment(currentTime).isBetween("1711", "2011")) {
       // 17시 11분~20시 10분 사이
-      baseTime = "1700";
+      srtBaseTime = "1700";
     } else if (moment(currentTime).isBetween("2011", "2311")) {
       // 20시 11분~23시 10분 사이
-      baseTime = "2000";
+      srtBaseTime = "2000";
     } else {
       // 23시 11분~23시 59분
-      baseTime = "2300";
+      srtBaseTime = "2300";
+    }
+    setSrtBaseTime(srtBaseTime);
+
+    /**
+     * [초단기실황조회용 날짜/시간 세팅]
+     * 매시간 정각 40분 후에 조회 가능. 예) 12시 데이터는 12시 41분부터 / 1시 데이터는 1시 41분부터 조회 가능
+     */
+    if (moment(currentTime).isBetween("0041", "0140")) {
+      ultraSrtBaseTime = "0000";
+    } else if (moment(currentTime).isBetween("0141", "0240")) {
+      ultraSrtBaseTime = "0100";
+    } else if (moment(currentTime).isBetween("0241", "0340")) {
+      ultraSrtBaseTime = "0200";
+    } else if (moment(currentTime).isBetween("0341", "0440")) {
+      ultraSrtBaseTime = "0300";
+    } else if (moment(currentTime).isBetween("0441", "0540")) {
+      ultraSrtBaseTime = "0400";
+    } else if (moment(currentTime).isBetween("0541", "0640")) {
+      ultraSrtBaseTime = "0500";
+    } else if (moment(currentTime).isBetween("0641", "0740")) {
+      ultraSrtBaseTime = "0600";
+    } else if (moment(currentTime).isBetween("0741", "0840")) {
+      ultraSrtBaseTime = "0700";
+    } else if (moment(currentTime).isBetween("0841", "0940")) {
+      ultraSrtBaseTime = "0800";
+    } else if (moment(currentTime).isBetween("0941", "1040")) {
+      ultraSrtBaseTime = "0900";
+    } else if (moment(currentTime).isBetween("1041", "1140")) {
+      ultraSrtBaseTime = "1000";
+    } else if (moment(currentTime).isBetween("1141", "1240")) {
+      ultraSrtBaseTime = "1100";
+    } else if (moment(currentTime).isBetween("1241", "1340")) {
+      ultraSrtBaseTime = "1200";
+    } else if (moment(currentTime).isBetween("1341", "1440")) {
+      ultraSrtBaseTime = "1300";
+    } else if (moment(currentTime).isBetween("1441", "1540")) {
+      ultraSrtBaseTime = "1400";
+    } else if (moment(currentTime).isBetween("1541", "1640")) {
+      ultraSrtBaseTime = "1500";
+    } else if (moment(currentTime).isBetween("1641", "1740")) {
+      ultraSrtBaseTime = "1600";
+    } else if (moment(currentTime).isBetween("1741", "1840")) {
+      ultraSrtBaseTime = "1700";
+    } else if (moment(currentTime).isBetween("1841", "1940")) {
+      ultraSrtBaseTime = "1800";
+    } else if (moment(currentTime).isBetween("1941", "2040")) {
+      ultraSrtBaseTime = "1900";
+    } else if (moment(currentTime).isBetween("2041", "2140")) {
+      ultraSrtBaseTime = "2000";
+    } else if (moment(currentTime).isBetween("2141", "2240")) {
+      ultraSrtBaseTime = "2100";
+    } else if (moment(currentTime).isBetween("2241", "2340")) {
+      ultraSrtBaseTime = "2200";
+    } else {
+      // 2341 ~ 0040
+      ultraSrtBaseTime = "2300";
     }
 
-    setBaseTime(baseTime);
+    setUltraSrtBaseTime(ultraSrtBaseTime);
   };
 
+  /**
+   * 1. 위도, 경도 얻은 후
+   * 2. getAddress 호출하여 한글 주소 얻음
+   * 3. 위,경도를 getGridGPS 호출하여 좌표값으로 바꾼후 getWeather 호출
+   */
   getLocation = async () => {
     let { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") {
@@ -97,12 +169,48 @@ export default function App() {
     setLatitude(location.coords.latitude);
     setLongitude(location.coords.longitude);
 
+    getAddress(location.coords.latitude, location.coords.longitude);
+
     const rs = await getGridGPS(); // 위도,경도를 기상청 api에 활용 가능한 x,y로 바꾸는 함수
     getWeather(rs.x, rs.y); // 좌표 값 사용하여 날씨데이터 받아오는 함수
   };
 
+  /**
+   * 한글 주소 얻음
+   */
+  getAddress = async (latitude, longitude) => {
+    const worldOpenkey = "D2914382-1CF1-340A-B872-29911F460AEF";
+    const url = `http://api.vworld.kr/req/address?service=address&request=getAddress&version=2.0&crs=epsg:4326&point=${longitude},${latitude}&format=json&type=PARCEL&zipcode=false&simple=true&key=${worldOpenkey}`;
+    console.log(url);
+
+    await axios
+      .get(url)
+      .then(function (response) {
+        const addrGu = response.data.response.result[0].structure.level2; // 구 이름
+        const addrDong = response.data.response.result[0].structure.level4L; // 동 이름
+        setAddrObj({
+          addrGu,
+          addrDong,
+        });
+      })
+      .catch(function (error) {
+        console.log("실패 : " + error);
+      });
+  };
+
   // 위,경도 -> 좌표변환 함수
   getGridGPS = async () => {
+    // 위,경도 -> 좌표변환 하기 위한 기본값
+    const RE = 6371.00877; // 지구 반경(km)
+    const GRID = 5.0; // 격자 간격(km)
+    const SLAT1 = 30.0; // 투영 위도1(degree)
+    const SLAT2 = 60.0; // 투영 위도2(degree)
+    const OLON = 126.0; // 기준점 경도(degree)
+    const OLAT = 38.0; // 기준점 위도(degree)
+    const XO = 43; // 기준점 X좌표(GRID)
+    const YO = 136; // 기1준점 Y좌표(GRID)
+    //
+
     var DEGRAD = Math.PI / 180.0;
     var RADDEG = 180.0 / Math.PI;
 
@@ -122,9 +230,6 @@ export default function App() {
     ro = (re * sf) / Math.pow(ro, sn);
     var rs = {};
 
-    // toXY : 위,경도를 좌표로 변경
-    //if (code == "toXY") {
-
     rs["lat"] = latitude; // 객체 rs에 "lat"를 이름으로 하는 key 를 생성하고, 변수 latitude을 value로 할당한다.
     rs["lng"] = longitude; // 객체 rs에 "lng"를 이름으로 하는 key 를 생성하고, 변수 longitude을 value로 할당한다.
     var ra = Math.tan(Math.PI * 0.25 + latitude * DEGRAD * 0.5);
@@ -136,108 +241,57 @@ export default function App() {
     rs["x"] = Math.floor(ra * Math.sin(theta) + XO + 0.5);
     rs["y"] = Math.floor(ro - ra * Math.cos(theta) + YO + 0.5);
 
-    // else : 좌표를 위,경도로 변경
-    // else {
-    //   rs["x"] = v1;
-    //   rs["y"] = v2;
-    //   var xn = v1 - XO;
-    //   var yn = ro - v2 + YO;
-    //   ra = Math.sqrt(xn * xn + yn * yn);
-    //   if (sn < 0.0) -ra;
-    //   var alat = Math.pow((re * sf) / ra, 1.0 / sn);
-    //   alat = 2.0 * Math.atan(alat) - Math.PI * 0.5;
-
-    //   if (Math.abs(xn) <= 0.0) {
-    //     theta = 0.0;
-    //   } else {
-    //     if (Math.abs(yn) <= 0.0) {
-    //       theta = Math.PI * 0.5;
-    //       if (xn < 0.0) -theta;
-    //     } else theta = Math.atan2(xn, yn);
-    //   }
-    //   var alon = theta / sn + olon;
-    //   rs["lat"] = alat * RADDEG;
-    //   rs["lng"] = alon * RADDEG;
-    // }
-
     return rs;
   };
 
   // nx,ny : 위,경도를 좌표로 바꾼 각각의 값
   getWeather = async (nx, ny) => {
-    const url = `http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${API_KEY}&numOfRows=20&pageNo=1&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${nx}&ny=${ny}`;
-    console.log(
-      nx +
-        "," +
-        ny +
-        "," +
-        baseDate +
-        "," +
-        baseTime +
-        "," +
-        API_KEY +
-        ", url :" +
-        url
-    );
-    await axios
-      .get(url)
-      .then(function (response) {
-        const WeatherResponseData = response.data.response.body.items.item; //필요한 정보만 받아오기 전부 다 받아 오려면 response.data 까지만 적는다.
-        setWeatherData(WeatherResponseData);
-      })
-      .catch(function (error) {
-        console.log("실패 : " + error);
-      });
-    // weatherData 배열을 훑으며 "category"값을 key로 하고 fcstValue 값을 value로 하는 새로운 배열 생성
-    // var weatherDataArray = weatherData.map(function (weatherDataArr) { // map 사용한 동일 코드 : return 값 있어야 함.
-    weatherData.forEach(function (weatherDataArr) {
-      let weatherDataObj = {};
-      let weatherDataObjKey = weatherDataArr["category"];
-      weatherDataObj[weatherDataObjKey] = weatherDataArr.fcstValue;
-      console.log(weatherDataObj);
-      // switch (weatherDataArr["category"]) {
-      //   case "POP":
-      //     setPop(weatherDataArr.fcstValue);
-      //     break;
-      //   case "PTY":
-      //     setPty(weatherDataArr.fcstValue);
-      //     break;
-      //   case "PCP":
-      //     setPcp(weatherDataArr.fcstValue);
-      //     break;
-      //   case "REH":
-      //     setReh(weatherDataArr.fcstValue);
-      //     break;
-      //   case "SNO":
-      //     setSno(weatherDataArr.fcstValue);
-      //     break;
-      //   case "SKY":
-      //     setSky(weatherDataArr.fcstValue);
-      //     break;
-      //   case "TMP":
-      //     setTmp(weatherDataArr.fcstValue);
-      //     break;
-      //   case "TMN":
-      //     setTmn(weatherDataArr.fcstValue);
-      //     break;
-      //   case "TMX":
-      //     setTmx(weatherDataArr.fcstValue);
-      //     break;
-      //   case "UUU":
-      //     setUuu(weatherDataArr.fcstValue);
-      //     break;
-      //   case "VVV":
-      //     setVvv(weatherDataArr.fcstValue);
-      //     break;
-      //   case "VEC":
-      //     setVec(weatherDataArr.fcstValue);
-      //     break;
-      //   case "WSD":
-      //     setWsd(weatherDataArr.fcstValue);
-      //     break;
-      // }
-    });
+    const API_KEY =
+      "Skm8Sx%2BhuSd8PBsZeDzGPZVXFlXODLxEJR2MRRajPQqn1aID2DYuEYoMC97NhdpJ4AzetqrX2xTDHtIUKnTX1g%3D%3D";
+
+    /**
+     * [단기예보조회용 HTTP 비동기 통신 ]
+     */
+    (getSrtWeather = async () => {
+      const url = `http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${API_KEY}&numOfRows=10&pageNo=1&dataType=JSON&base_date=${srtBaseDate}&base_time=${srtBaseTime}&nx=${nx}&ny=${ny}`;
+      await axios
+        .get(url)
+        .then(function (response) {
+          const WeatherResponseData = response.data.response.body.items.item; //필요한 정보만 받아오기 전부 다 받아 오려면 response.data 까지만 적는다.
+          setSrtWeatherObj(WeatherResponseData);
+          // WeatherResponseData.map(function (arr, i) {
+          //   setSrtWeatherObj ({
+          //     category = arr.category,
+          //   })
+          // });
+        })
+        .catch(function (error) {
+          console.log("실패 : " + error);
+        });
+    })();
+
+    /**
+     * [초단기실황조회용 HTTP 비동기 통신 ]
+     */
+    (getUltSrtWeather = async () => {
+      const url = `http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst?serviceKey=${API_KEY}&numOfRows=10&pageNo=1&base_date=${ultraSrtBaseDate}&base_time=${ultraSrtBaseTime}&nx=${nx}&ny=${ny}&dataType=JSON`;
+      await axios
+        .get(url)
+        .then(function (response) {
+          const WeatherResponseData = response.data.response.body.items.item;
+          setUltSrtWeatherObj(WeatherResponseData);
+
+          // WeatherResponseData.map(function (arr, i) {
+          //   console.log("getUltSrtWeather :" + arr.category);
+          // });
+        })
+        .catch(function (error) {
+          console.log("실패 : " + error);
+        });
+    })();
+    setIsLoading(false);
   };
+  console.log(ultSrtWeatherObj[0]);
 
   // 클래스 생명주기 메서드 중 componentDidMount() 와 동일한 기능을 한다.
   // useEffect는첫번째 렌더링과 이후의 모든 업데이트에서 수행됩니다.
@@ -248,11 +302,13 @@ export default function App() {
   // 빈 배열을 넣어 주면 처음 랜더링 될 때 한번만 실행 된다. 넣지 않으면 모든 업데이트에서 실행되며
   // 배열안에 [count] 같이 인자를 넣어주면 해당 인자가 업데이트 될 때 마다 실행된다.
 
-  //const { latitude, longitude } = this.state;
-  return (
+  return isLoading ? (
+    <Loading />
+  ) : (
     <View style={styles.container}>
+      <UltStrWeather weatherObj={ultSrtWeatherObj[0]} />
       <Text>
-        강수확률 : {pop} % / PTY : {pty} / PCP :{pcp} / 습도 : {reh} %
+        주소 : {addrObj.addrGu} {addrObj.addrDong} /
       </Text>
       <StatusBar style="auto" />
     </View>

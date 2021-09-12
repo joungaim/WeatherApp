@@ -15,6 +15,7 @@
     "expo-web-browser": "~9.2.0",
     "moment": "^2.29.1",
     "react": "16.13.1",
+    "react-apple-emojis": "^2.0.2",
     "react-dom": "16.13.1",
     "react-native": "https://github.com/expo/react-native/archive/sdk-42.0.0.tar.gz",
     "react-native-web": "~0.13.12"
